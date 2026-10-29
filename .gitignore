@@ -1,0 +1,14 @@
+# Facturas y datos de clientes: nunca publicar.
+LUMAS/
+*.pdf
+datos_cliente.txt
+
+# Archivos generados localmente.
+build/
+dist/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.log

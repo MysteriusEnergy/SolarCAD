@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SolarCAD: sol y compás de dibujo técnico">
+<title>SolarCAD — Sol y compás técnico</title>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<!-- Solar disk and broad rays -->
+<circle cx="205" cy="204" r="103" fill="#F5B942"/>
+<g stroke="#F5B942" stroke-width="20">
+<path d="M205 57V36M103 102L87 86M60 204H38M103 306L87 322M307 102L323 86"/>
+</g>
+<!-- CAD construction ring -->
+<path d="M300 105A163 163 0 1 1 133 358" stroke="#1C728A" stroke-width="15"/>
+<path d="M329 141A128 128 0 0 1 354 306" stroke="#13253F" stroke-width="10" stroke-dasharray="24 18"/>
+<path d="M364 206h35M352 82v39" stroke="#1C728A" stroke-width="11"/>
+<!-- drafting compass -->
+<path d="M253 233L126 451" stroke="#13253F" stroke-width="35"/>
+<path d="M275 234L400 451" stroke="#13253F" stroke-width="35"/>
+<path d="M191 343H337" stroke="#13253F" stroke-width="17"/>
+<path d="M263 273V357" stroke="#1C728A" stroke-width="12"/>
+<circle cx="264" cy="222" r="35" fill="#13253F"/>
+<circle cx="264" cy="222" r="13" fill="#F5B942"/>
+<path d="M264 187v-34" stroke="#13253F" stroke-width="20"/>
+<path d="M322 326l15 -9M338 357l15 -9M355 389l15 -9" stroke="#F5B942" stroke-width="7"/>
+</g>
+</svg>
