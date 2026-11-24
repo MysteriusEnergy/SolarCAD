@@ -3,8 +3,14 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
 logo = str(Path(SPECPATH) / "img" / "a_clean_vector_style_logo_on_a_transparent_backgro.png")
+grid = str(Path(SPECPATH) / "grids" / "us_noaa_pvhpgn.tif")
 datas, binaries, hiddenimports = collect_all("pymupdf")
+proj_datas, proj_binaries, proj_hiddenimports = collect_all("pyproj")
+datas += proj_datas
+binaries += proj_binaries
+hiddenimports += proj_hiddenimports
 datas.append((logo, "img"))
+datas.append((grid, "grids"))
 
 a = Analysis(
     ["SolarCAD_V3.py"],
