@@ -72,10 +72,17 @@ def coordinate_transformer():
     return group.transformers[0]
 
 
+def unwrap_coordinates(value):
+    value = value.strip()
+    if value.startswith("(") and value.endswith(")"):
+        return value[1:-1].strip()
+    return value
+
+
 def convert_google_coordinates(value):
     """Google Maps copia latitud, longitud; PROJ recibe longitud, latitud."""
     number = r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)"
-    match = re.fullmatch(rf"\s*({number})\s*(?:[,;]|\s)\s*({number})\s*", value)
+    match = re.fullmatch(rf"\s*({number})\s*(?:[,;]|\s)\s*({number})\s*", unwrap_coordinates(value))
     if not match:
         raise ValueError("Pega latitud, longitud en grados decimales; ejemplo: 18.4655, -66.1057")
     latitude, longitude = map(float, match.groups())
@@ -373,8 +380,12 @@ class App(tk.Tk):
         usable_w, usable_h = max(1, screen_w-60), max(1, screen_h-90)
         initial_w = min(usable_w, round(960*dpi_factor),
                         max(min(560, usable_w), round(screen_w*.70)))
-        initial_h = min(usable_h, round(760*dpi_factor),
-                        max(min(480, usable_h), round(screen_h*.73)))
+        # Rótulo es compacto; reservar más altura solo si el usuario la pide.
+        initial_h = min(usable_h, round(665*dpi_factor),
+                        max(min(480, usable_h), round(screen_h*.82)))
+        self.compact_height = initial_h
+        self.consumption_height = min(usable_h, round(730*dpi_factor))
+        self.consumption_window = None
         self.geometry(f"{initial_w}x{initial_h}+{(screen_w-initial_w)//2}"
                       f"+{(screen_h-initial_h)//2}")
         self.minsize(min(560, usable_w), min(480, usable_h))
@@ -398,21 +409,19 @@ class App(tk.Tk):
         self.warnings = []
         self.configure_styles()
 
-        banner = tk.Frame(self, bg=NAVY, padx=26, pady=10)
+        banner = tk.Frame(self, bg=NAVY, padx=16, pady=7)
         banner.pack(fill="x")
         self.load_logo(banner)
-        branding = tk.Frame(banner, bg=NAVY)
-        branding.pack(side="left", padx=(16, 0))
-        tk.Label(branding, text="SolarCAD", bg=NAVY, fg="white",
-                 font=("Segoe UI", 24, "bold")).pack(anchor="w")
-        tk.Label(branding, text="De tu factura LUMA a tus datos de trabajo",
-                 bg=NAVY, fg="#C7D5E3", font=("Segoe UI", 10)).pack(anchor="w")
-        self.banner_badge = tk.Label(banner, text="LOCAL  •  PDF → TXT", bg=NAVY, fg=GOLD,
-                                     font=("Segoe UI", 10, "bold"))
-        self.banner_badge.pack(side="right", padx=5)
-        banner.bind("<Configure>", self.resize_banner)
+        tk.Label(banner, text="SolarCAD", bg=NAVY, fg="white",
+                 font=("Segoe UI", 16, "bold")).pack(side="left", padx=(8, 14))
+        self.open_button = ttk.Button(banner, text="Abrir PDF", style="Accent.TButton",
+                                      command=self.open_pdf, cursor="hand2")
+        self.open_button.pack(side="right")
+        self.filename = tk.Label(banner, text="Ningún archivo seleccionado", bg=NAVY,
+                                 fg="#C7D5E3", anchor="w", font=("Segoe UI", 9))
+        self.filename.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        outer = ttk.Frame(self, style="App.TFrame", padding=(24, 12, 24, 12))
+        outer = ttk.Frame(self, style="App.TFrame", padding=(14, 8))
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
         outer.rowconfigure(0, weight=1)
@@ -430,86 +439,74 @@ class App(tk.Tk):
         self.canvas.bind("<Configure>", self.resize_content)
         self.bind_all("<MouseWheel>", self.scroll_with_wheel, add="+")
 
-        file_card = ttk.Frame(content, style="Card.TFrame", padding=(18, 8))
-        file_card.pack(fill="x")
-        self.open_button = ttk.Button(file_card, text="Abrir factura PDF", style="Accent.TButton",
-                                      command=self.open_pdf, cursor="hand2")
-        self.open_button.pack(side="left")
-        file_info = ttk.Frame(file_card, style="Card.TFrame")
-        file_info.pack(side="left", fill="x", expand=True, padx=(18, 0))
-        ttk.Label(file_info, text="ARCHIVO ACTUAL", style="Caption.TLabel").pack(anchor="w")
-        self.filename = ttk.Label(file_info, text="Ningún archivo seleccionado",
-                                  style="Card.TLabel")
-        self.filename.pack(anchor="w")
-
         notebook = ttk.Notebook(content, style="Main.TNotebook")
-        notebook.pack(fill="both", expand=True, pady=(14, 12))
+        self.notebook = notebook
+        notebook.pack(fill="both", expand=True)
+        notebook.enable_traversal()
         notebook.bind("<<NotebookTabChanged>>", self.change_tab)
-        tab = ttk.Frame(notebook, style="Page.TFrame", padding=(22, 14))
-        notebook.add(tab, text="Datos para AutoCAD")
-        ttk.Label(tab, text="Datos de la factura", style="Section.TLabel").pack(anchor="w")
-        ttk.Label(tab, text="Los campos detectados se pueden corregir manualmente.",
-                  style="Hint.TLabel").pack(anchor="w", pady=(1, 9))
-        self.field_group(tab, ("PREPA_CASE", "PREPA_METER", "LOCATION_ID",
-                               "NOMBRE", "DIRECCION", "PUEBLO"))
-        ttk.Separator(tab).pack(fill="x", pady=(12, 9))
-        ttk.Label(tab, text="Datos adicionales", style="Section.TLabel").pack(anchor="w")
-        ttk.Label(tab, text="Completa estos datos si los necesitas en tu proyecto.",
-                  style="Hint.TLabel").pack(anchor="w", pady=(1, 9))
-        self.field_group(tab, ("SYSTEM_ID", "GPS_LAT", "GPS_LON", "LAMBERT_X", "LAMBERT_Y"))
-        coordinates = ttk.Frame(tab, style="Coordinates.TFrame", padding=(14, 10))
-        coordinates.pack(fill="x", pady=(12, 0))
-        ttk.Label(coordinates, text="Convertir desde Google Maps", style="CoordinatesTitle.TLabel").pack(anchor="w")
+        self.field_entries = {}
+        self.title_tab = ttk.Frame(notebook, style="App.TFrame", padding=(10, 6))
+        notebook.add(self.title_tab, text="Rótulo", underline=0)
+        client = self.form_card(self.title_tab, 0, "Cliente y servicio", TEAL)
+        location = self.form_card(self.title_tab, 1, "Ubicación", GOLD)
+        self.field_group(client, (("NOMBRE", "PUEBLO"), ("DIRECCION",),
+                                  ("PREPA_CASE", "PREPA_METER"),
+                                  ("LOCATION_ID", "SYSTEM_ID")), tab=self.title_tab)
+        coordinates = ttk.Frame(location, style="Coordinates.TFrame", padding=(8, 5))
+        coordinates.pack(fill="x", pady=(5, 0))
+        ttk.Label(coordinates, text="Pegar las coordenadas de Site Capture",
+                  style="CoordinatesTitle.TLabel").pack(anchor="w")
         coordinates_row = ttk.Frame(coordinates, style="Coordinates.TFrame")
-        coordinates_row.pack(fill="x", pady=(7, 0))
+        coordinates_row.pack(fill="x", pady=(3, 0))
         self.google_entry = ttk.Entry(coordinates_row, textvariable=self.google_coords,
-                                      style="Field.TEntry")
-        self.google_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+                                      style="Field.TEntry", width=9)
+        self.google_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         self.google_entry.bind("<Return>", lambda _event: self.convert_coordinates())
         self.convert_button = ttk.Button(coordinates_row, text="Convertir", style="Accent.TButton",
-                                         command=self.convert_coordinates, cursor="hand2")
+                                         command=self.convert_coordinates, cursor="hand2", padding=(8, 5))
         self.convert_button.pack(side="right")
         self.coordinate_hint_label = ttk.Label(coordinates, textvariable=self.coordinate_hint,
                                                style="CoordinatesHint.TLabel")
-        self.coordinate_hint_label.pack(anchor="w", pady=(5, 0))
+        self.coordinate_hint_label.pack(anchor="w", pady=(3, 0))
+        coordinates.bind("<Configure>", lambda event: self.coordinate_hint_label.configure(
+            wraplength=max(1, event.width-18)))
+        self.field_group(location, (("GPS_LAT", "GPS_LON", "LAMBERT_X", "LAMBERT_Y"),),
+                         tab=self.title_tab)
+        ttk.Label(location, text="NAD83 · Lambert X/Y en metros", justify="left",
+                  style="Hint.TLabel").pack(anchor="w", pady=(3, 0))
 
-        tab2 = ttk.Frame(notebook, style="Page.TFrame", padding=(22, 18))
-        notebook.add(tab2, text="Consumo · Excel")
-        ttk.Label(tab2, text="Historial de consumo", style="Section.TLabel").pack(anchor="w")
-        self.consumption_hint = ttk.Label(
-            tab2, text="12 valores para pegar en Excel. Se omite el primer mes de la gráfica de 13. "
-                       "Si la lectura automática falla, escribe los valores aquí.",
-            style="Hint.TLabel", wraplength=780)
-        self.consumption_hint.pack(anchor="w", pady=(4, 18))
-        tab2.bind("<Configure>", lambda event: self.consumption_hint.configure(
-            wraplength=max(220, event.width-44)))
+        tab2 = ttk.Frame(notebook, style="Page.TFrame", padding=(16, 10))
+        self.consumption_tab = tab2
+        notebook.add(tab2, text="Consumo", underline=0)
         self.consumption_workspace = ttk.Frame(tab2, style="Page.TFrame")
         self.consumption_workspace.pack(fill="both", expand=True)
-        self.preview_panel = ttk.Frame(self.consumption_workspace, style="Page.TFrame")
+        self.consumption_workspace.rowconfigure(0, weight=1)
+        self.preview_panel = tk.Frame(self.consumption_workspace, bg="white", padx=4, pady=4)
+        self.preview_detached = False
+        self.preview_close_callback = self.register(self.close_preview_window)
         self.values_panel = ttk.Frame(self.consumption_workspace, style="Page.TFrame")
         self.consumption_workspace.bind("<Configure>", self.resize_consumption_workspace)
 
-        ttk.Label(self.preview_panel, text="Factura original", style="Section.TLabel").pack(anchor="w")
         page_controls = ttk.Frame(self.preview_panel, style="Page.TFrame")
-        page_controls.pack(fill="x", pady=(6, 5))
+        page_controls.pack(fill="x", pady=(3, 4))
         self.previous_page_button = ttk.Button(page_controls, text="◀", style="Quiet.TButton",
                                                command=lambda: self.change_preview_page(-1),
-                                               cursor="hand2", state="disabled", width=3)
+                                               cursor="hand2", state="disabled", width=3, padding=(8, 4))
         self.previous_page_button.pack(side="left")
         self.next_page_button = ttk.Button(page_controls, text="▶", style="Quiet.TButton",
                                            command=lambda: self.change_preview_page(1),
-                                           cursor="hand2", state="disabled", width=3)
+                                           cursor="hand2", state="disabled", width=3, padding=(8, 4))
         self.next_page_button.pack(side="left", padx=(5, 0))
         ttk.Label(page_controls, textvariable=self.preview_page_label,
                   style="Page.TLabel").pack(side="left", padx=(10, 0))
         zoom_controls = ttk.Frame(self.preview_panel, style="Page.TFrame")
-        zoom_controls.pack(fill="x", pady=(0, 7))
+        zoom_controls.pack(fill="x", pady=(0, 4))
         self.preview_zoom_buttons = []
         for text, command in (("−", lambda: self.change_preview_zoom(1 / 1.4)),
                               ("+", lambda: self.change_preview_zoom(1.4)),
                               ("Ajustar ancho", self.reset_preview_zoom)):
             button = ttk.Button(zoom_controls, text=text, style="Quiet.TButton",
-                                command=command, cursor="hand2", state="disabled")
+                                command=command, cursor="hand2", state="disabled", padding=(9, 4))
             button.pack(side="left", padx=(0, 5))
             self.preview_zoom_buttons.append(button)
 
@@ -517,7 +514,7 @@ class App(tk.Tk):
         preview_area.pack(fill="both", expand=True)
         preview_area.columnconfigure(0, weight=1)
         preview_area.rowconfigure(0, weight=1)
-        self.preview_canvas = tk.Canvas(preview_area, bg="#E8EEF4", width=310, height=320,
+        self.preview_canvas = tk.Canvas(preview_area, bg="#E8EEF4", width=280, height=185,
                                         highlightthickness=0, borderwidth=0)
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         preview_vscroll = ttk.Scrollbar(preview_area, orient="vertical",
@@ -526,7 +523,6 @@ class App(tk.Tk):
         preview_hscroll = ttk.Scrollbar(preview_area, orient="horizontal",
                                         command=self.preview_canvas.xview)
         preview_hscroll.grid(row=1, column=0, sticky="ew")
-        self.preview_canvas.configure(yscrollincrement=24)
         self.preview_canvas.configure(yscrollcommand=preview_vscroll.set,
                                       xscrollcommand=preview_hscroll.set)
         self.preview_canvas.bind("<Configure>", self.preview_resized)
@@ -540,24 +536,30 @@ class App(tk.Tk):
             wraplength=max(220, event.width-20)))
 
         ttk.Label(self.values_panel, text="12 consumos (kWh)", style="Section.TLabel").pack(anchor="w")
-        ttk.Label(self.values_panel, text="Verifica cada valor en la gráfica.",
-                  style="Hint.TLabel").pack(anchor="w", pady=(3, 9))
+        ttk.Label(self.values_panel, text="Omite el primero de la gráfica de 13 meses.",
+                  style="Hint.TLabel", wraplength=240).pack(anchor="w", pady=(2, 5))
+        self.detach_button = ttk.Button(self.values_panel, text="Ver gráfica", style="Quiet.TButton",
+                                        command=self.open_preview_window, state="disabled")
+        self.detach_button.pack(anchor="w", pady=(0, 4))
         grid = ttk.Frame(self.values_panel, style="Page.TFrame")
         grid.pack(fill="x")
-        grid.columnconfigure(1, weight=1)
+        for col in range(3):
+            grid.columnconfigure(col, weight=1, uniform="months")
         for i, var in enumerate(self.months):
-            ttk.Label(grid, text=f"Mes {i+1:02d}", style="Page.TLabel").grid(
-                row=i, column=0, sticky="w", padx=(0, 10), pady=4)
-            ttk.Entry(grid, textvariable=var, style="Field.TEntry", width=12).grid(
-                row=i, column=1, sticky="ew", pady=4)
-        ttk.Button(self.values_panel, text="Copiar 12 valores para Excel",
+            row, col = divmod(i, 3)
+            ttk.Label(grid, text=f"Mes {i+1:02d}", style="Hint.TLabel").grid(
+                row=row*2, column=col, sticky="w", padx=3)
+            ttk.Entry(grid, textvariable=var, style="Month.Field.TEntry", width=6).grid(
+                row=row*2+1, column=col, sticky="ew", padx=3, pady=(0, 2))
+        ttk.Button(self.values_panel, text="Copiar para Excel",
                    style="Secondary.TButton", command=self.copy_consumption,
-                   cursor="hand2").pack(anchor="w", pady=(14, 0))
+                   cursor="hand2").pack(anchor="w", pady=(5, 0))
+        self.build_review_tab()
 
         actions = ttk.Frame(outer, style="App.TFrame")
         actions.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         actions.columnconfigure(2, weight=1)
-        self.export_button = ttk.Button(actions, text="Generar datos_cliente.txt",
+        self.export_button = ttk.Button(actions, text="Generar TXT",
                                         style="Primary.TButton", command=self.export, cursor="hand2")
         self.export_button.grid(row=0, column=0, sticky="w")
         self.clear_button = ttk.Button(actions, text="Limpiar todo", style="Quiet.TButton",
@@ -566,8 +568,6 @@ class App(tk.Tk):
         self.review_button = ttk.Button(actions, text="Ver avisos", style="Quiet.TButton",
                                          command=self.review_warnings, state="disabled", cursor="hand2")
         self.review_button.grid(row=0, column=2, sticky="e")
-        self.narrow_actions = False
-        actions.bind("<Configure>", self.resize_actions)
 
         footer = ttk.Frame(outer, style="App.TFrame")
         footer.grid(row=2, column=0, sticky="ew", pady=(8, 0))
@@ -584,52 +584,105 @@ class App(tk.Tk):
 
     def resize_content(self, event):
         self.canvas.itemconfigure(self.content_window, width=event.width)
-        self.filename.configure(wraplength=max(170, event.width-230))
         self.update_scroll_region()
-
-    def resize_actions(self, event):
-        narrow = event.width < 700
-        if narrow == self.narrow_actions:
-            return
-        self.narrow_actions = narrow
-        if narrow:
-            self.review_button.grid_configure(row=1, column=0, columnspan=3,
-                                              sticky="e", pady=(6, 0))
-        else:
-            self.review_button.grid_configure(row=0, column=2, columnspan=1,
-                                              sticky="e", pady=0)
+        self.after_idle(self.fit_current_tab)
 
     def resize_footer(self, event):
         wrap = max(260, event.width - 55)
         self.status_label.configure(wraplength=wrap)
         self.notice_label.configure(wraplength=wrap)
-
-    def resize_banner(self, event):
-        if event.width < 760 and self.banner_badge.winfo_manager():
-            self.banner_badge.pack_forget()
-        elif event.width >= 760 and not self.banner_badge.winfo_manager():
-            self.banner_badge.pack(side="right", padx=5)
+        if event.height < 435 and self.notice_label.winfo_manager():
+            self.notice_label.pack_forget()
+        elif event.height >= 435 and not self.notice_label.winfo_manager():
+            self.notice_label.pack(anchor="w", pady=(2, 0))
 
     def change_tab(self, event):
         self.canvas.yview_moveto(0)
-        if event.widget.index("current") == 1:
+        selected = event.widget.select()
+        self.resize_for_consumption(selected == str(self.consumption_tab))
+        if selected == str(self.consumption_tab):
             self.after_idle(self.schedule_preview)
+        if selected == str(self.review_tab):
+            self.refresh_review()
+        self.after_idle(self.fit_current_tab)
+
+    def resize_for_consumption(self, selected):
+        if not selected:
+            if self.consumption_window:
+                previous, expanded = self.consumption_window
+                if self.state() == "normal" and self.geometry() == expanded:
+                    self.geometry(previous)
+                self.consumption_window = None
+            return
+        if (self.state() != "normal" or self.consumption_window or
+                self.winfo_height() != self.compact_height or
+                self.consumption_height <= self.compact_height or
+                self.winfo_width() < 720):
+            return
+        previous = self.geometry()
+        match = re.fullmatch(r"(\d+)x\d+([+-]\d+)([+-]\d+)", previous)
+        if match:
+            width, x, y = match.groups()
+            if y.startswith("+"):
+                y = f"+{min(int(y), max(0, self.winfo_screenheight()-self.consumption_height-70))}"
+            expanded = f"{width}x{self.consumption_height}{x}{y}"
+            self.consumption_window = previous, expanded
+            self.geometry(expanded)
+
+    def fit_current_tab(self):
+        selected = self.notebook.select()
+        if selected:
+            page = self.nametowidget(selected)
+            height = page.winfo_reqheight()
+            if page == self.consumption_tab and self.preview_side_by_side and not self.preview_detached:
+                # Expand the PDF pane into unused space instead of leaving it below the tabs.
+                chrome = self.notebook.winfo_height() - page.winfo_height()
+                height = max(height, self.canvas.winfo_height() - chrome - 2)
+            if int(self.notebook.cget("height")) != height:
+                self.notebook.configure(height=height)
 
     def resize_consumption_workspace(self, event):
-        side_by_side = event.width >= 750
-        if side_by_side == self.preview_side_by_side:
-            return
+        side_by_side = event.width >= 645
+        if side_by_side != self.preview_side_by_side:
+            self.layout_consumption(side_by_side)
+
+    def layout_consumption(self, side_by_side):
         self.preview_side_by_side = side_by_side
-        self.preview_panel.grid_forget()
+        if not self.preview_detached:
+            self.preview_panel.grid_forget()
         self.values_panel.grid_forget()
-        self.consumption_workspace.columnconfigure(0, weight=3 if side_by_side else 1)
-        self.consumption_workspace.columnconfigure(1, weight=2 if side_by_side else 0)
-        if side_by_side:
+        embedded = side_by_side and not self.preview_detached
+        self.consumption_workspace.columnconfigure(0, weight=3 if embedded else 1)
+        self.consumption_workspace.columnconfigure(1, weight=2 if embedded else 0)
+        if embedded:
             self.preview_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
             self.values_panel.grid(row=0, column=1, sticky="nsew")
         else:
-            self.preview_panel.grid(row=0, column=0, sticky="nsew", pady=(0, 18))
-            self.values_panel.grid(row=1, column=0, sticky="nsew")
+            self.values_panel.grid(row=0, column=0, sticky="nsew")
+        self.after_idle(self.fit_current_tab)
+
+    def open_preview_window(self):
+        if self.preview_detached:
+            self.preview_panel.lift()
+            return
+        self.preview_panel.grid_forget()
+        self.preview_detached = True
+        self.wm_manage(self.preview_panel)
+        self.tk.call("wm", "title", self.preview_panel, "SolarCAD | Gráfica de consumo")
+        self.tk.call("wm", "geometry", self.preview_panel,
+                     f"{min(590, self.winfo_screenwidth()-40)}x{min(650, self.winfo_screenheight()-90)}")
+        self.tk.call("wm", "minsize", self.preview_panel, 320, 280)
+        self.tk.call("wm", "protocol", self.preview_panel, "WM_DELETE_WINDOW",
+                     self.preview_close_callback)
+        self.layout_consumption(self.preview_side_by_side)
+        self.schedule_preview()
+
+    def close_preview_window(self):
+        if not self.preview_detached:
+            return
+        self.wm_forget(self.preview_panel)
+        self.preview_detached = False
+        self.layout_consumption(self.preview_side_by_side)
 
     def show_preview_placeholder(self, text):
         self.preview_image = None
@@ -666,6 +719,7 @@ class App(tk.Tk):
         self.schedule_preview()
 
     def update_preview_controls(self):
+        self.detach_button.configure(state="normal" if self.preview_total else "disabled")
         if not self.preview_total:
             self.preview_page_label.set("Abre una factura para ver su gráfica")
         else:
@@ -734,15 +788,14 @@ class App(tk.Tk):
             self.preview_placeholder = None
             x = max(0, (self.preview_canvas.winfo_width() - image.width)//2)
             self.preview_canvas.create_image(x, 0, anchor="nw", image=self.preview_image)
-            self.preview_canvas.configure(scrollregion=(0, 0,
-                max(self.preview_canvas.winfo_width(), x+image.width),
-                max(self.preview_canvas.winfo_height(), image.height)))
+            self.preview_canvas.configure(scrollregion=(0, 0, x+image.width, image.height))
             self.preview_canvas.xview_moveto(old_x)
             self.preview_canvas.yview_moveto(old_y)
         except Exception as exc:
             self.show_preview_placeholder("No se pudo mostrar esta página: " + str(exc))
 
     def clear_preview(self):
+        self.close_preview_window()
         if self.preview_job is not None:
             self.after_cancel(self.preview_job)
             self.preview_job = None
@@ -755,21 +808,32 @@ class App(tk.Tk):
         self.show_preview_placeholder("Abre una factura PDF para verla aquí")
 
     def scroll_with_wheel(self, event):
-        if not self.canvas.winfo_exists() or event.widget.winfo_toplevel() != self:
+        if not event.delta:
             return
+        direction = -1 if event.delta > 0 else 1
         px, py = self.preview_canvas.winfo_rootx(), self.preview_canvas.winfo_rooty()
         if (self.preview_canvas.winfo_ismapped() and
             px <= event.x_root < px+self.preview_canvas.winfo_width() and
                 py <= event.y_root < py+self.preview_canvas.winfo_height()):
             steps = 3 * max(1, abs(event.delta) // 120)
             if event.state & 0x0001:
-                self.preview_canvas.xview_scroll(-steps if event.delta > 0 else steps, "units")
+                self.scroll_view(self.preview_canvas, "x", direction * steps)
             else:
-                self.preview_canvas.yview_scroll(-steps if event.delta > 0 else steps, "units")
+                self.scroll_view(self.preview_canvas, "y", direction * steps)
             return "break"
+        if event.widget.winfo_toplevel() != self:
+            return
         x, y = self.canvas.winfo_rootx(), self.canvas.winfo_rooty()
         if x <= event.x_root < x+self.canvas.winfo_width() and y <= event.y_root < y+self.canvas.winfo_height():
-            self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+            self.scroll_view(self.canvas, "y", direction)
+            return "break"
+
+    @staticmethod
+    def scroll_view(canvas, axis, steps):
+        view = canvas.xview if axis == "x" else canvas.yview
+        start, end = view()
+        if (steps < 0 and start > 0.0) or (steps > 0 and end < 1.0):
+            view("scroll", steps, "units")
 
     def configure_styles(self):
         style = ttk.Style(self)
@@ -805,11 +869,13 @@ class App(tk.Tk):
         style.configure("Field.TEntry", padding=(9, 3), fieldbackground="white",
                         foreground=NAVY, bordercolor="#C8D4DF", font=("Segoe UI", 10))
         style.map("Field.TEntry", bordercolor=[("focus", TEAL)])
+        style.configure("Compact.Field.TEntry", padding=(7, 2))
+        style.configure("Month.Field.TEntry", padding=(7, 1))
         style.configure("Main.TNotebook", background=BACKGROUND, borderwidth=0)
         style.configure("Main.TNotebook.Tab", background="#E5EBF2", foreground=MUTED,
-                        padding=(18, 9), font=("Segoe UI", 10, "bold"))
-        style.map("Main.TNotebook.Tab", background=[("selected", "white")],
-                  foreground=[("selected", NAVY)])
+                        padding=(12, 6), font=("Segoe UI", 10, "bold"))
+        style.map("Main.TNotebook.Tab", background=[("selected", NAVY), ("active", "#D2E1ED")],
+                  foreground=[("selected", "white")])
         for name, bg, fg, hover, pressed in (
             ("Accent", GOLD, NAVY, "#FFD477", "#DDA52B"),
             ("Primary", NAVY, "white", "#284D71", "#0C1C31"),
@@ -833,18 +899,81 @@ class App(tk.Tk):
             logo = image.convert("RGBA")
         self.window_icon = ImageTk.PhotoImage(logo.resize((64, 64), Image.Resampling.LANCZOS))
         self.iconphoto(True, self.window_icon)
-        self.header_logo = ImageTk.PhotoImage(logo.resize((76, 76), Image.Resampling.LANCZOS))
+        self.header_logo = ImageTk.PhotoImage(logo.resize((38, 38), Image.Resampling.LANCZOS))
         tk.Label(banner, image=self.header_logo, bg=NAVY).pack(side="left")
 
-    def field_group(self, parent, fields):
+    def form_card(self, parent, row, title, accent):
+        card = ttk.Frame(parent, style="Page.TFrame")
+        parent.columnconfigure(0, weight=1)
+        card.grid(row=row, column=0, sticky="ew", pady=(0, 8) if row == 0 else 0)
+        tk.Frame(card, bg=accent, height=4).pack(fill="x")
+        content = ttk.Frame(card, style="Page.TFrame", padding=(10, 7))
+        content.pack(fill="both", expand=True)
+        ttk.Label(content, text=title, style="Section.TLabel").pack(anchor="w")
+        return content
+
+    def field_group(self, parent, rows, *, tab):
         group = ttk.Frame(parent, style="Page.TFrame")
-        group.pack(fill="x")
-        group.columnconfigure(1, weight=1)
-        for row, key in enumerate(fields):
-            ttk.Label(group, text=LABELS[key], style="Page.TLabel", width=23).grid(
-                row=row, column=0, sticky="w", padx=(0, 12), pady=2)
-            ttk.Entry(group, textvariable=self.vars[key], style="Field.TEntry").grid(
-                row=row, column=1, sticky="ew", pady=2)
+        group.pack(fill="x", pady=(7, 0))
+        columns = max(len(keys) for keys in rows)
+        for col in range(columns):
+            group.columnconfigure(col, weight=1, uniform="fields")
+        for row, keys in enumerate(rows):
+            for col, key in enumerate(keys):
+                cell = ttk.Frame(group, style="Page.TFrame")
+                cell.grid(row=row, column=col, columnspan=columns if len(keys) == 1 else 1,
+                          sticky="ew", padx=(0, 8) if col < len(keys)-1 else 0, pady=(0, 2))
+                ttk.Label(cell, text=LABELS[key], style="Hint.TLabel").pack(anchor="w")
+                entry = ttk.Entry(cell, textvariable=self.vars[key], style="Compact.Field.TEntry", width=8)
+                entry.pack(fill="x")
+                self.field_entries[key] = (tab, entry)
+
+    def build_review_tab(self):
+        self.review_tab = ttk.Frame(self.notebook, style="Page.TFrame", padding=(16, 10))
+        self.notebook.add(self.review_tab, text="Revisión", underline=2)
+        ttk.Label(self.review_tab, text="Antes de generar el TXT", style="Section.TLabel").pack(anchor="w")
+        self.review_summary = ttk.Label(self.review_tab, style="Hint.TLabel")
+        self.review_summary.pack(anchor="w", pady=(2, 5))
+        table = ttk.Frame(self.review_tab, style="Page.TFrame")
+        table.pack(fill="x")
+        self.review_values = {}
+        for col, keys in enumerate((("NOMBRE", "DIRECCION", "PUEBLO", "PREPA_CASE",
+                                     "PREPA_METER", "LOCATION_ID"),
+                                    ("SYSTEM_ID", "GPS_LAT", "GPS_LON", "LAMBERT_X", "LAMBERT_Y"))):
+            table.columnconfigure(col, weight=1, uniform="review")
+            section = ttk.Frame(table, style="Page.TFrame")
+            section.grid(row=0, column=col, sticky="new", padx=(0, 10) if col == 0 else 0)
+            section.columnconfigure(0, weight=1)
+            for row, key in enumerate(keys):
+                ttk.Label(section, text=LABELS[key], style="Hint.TLabel").grid(
+                    row=row*2, column=0, sticky="w")
+                value = ttk.Label(section, style="Page.TLabel", width=1)
+                value.grid(row=row*2+1, column=0, sticky="ew")
+                self.review_values[key] = value
+                ttk.Button(section, text="Editar", style="Quiet.TButton", padding=(6, 2),
+                           command=lambda field=key: self.edit_review_field(field)).grid(
+                    row=row*2, column=1, rowspan=2, padx=(5, 0), pady=2)
+        self.refresh_review()
+
+    def refresh_review(self):
+        missing = 0
+        for key, label in self.review_values.items():
+            value = self.vars[key].get().strip()
+            missing += not value
+            label.configure(text=value or "Sin valor", foreground=NAVY if value else MUTED)
+        self.review_summary.configure(text=f"{len(KEYS)-missing} de {len(KEYS)} campos completos · Se omiten los vacíos.")
+
+    def edit_review_field(self, key):
+        page, entry = self.field_entries[key]
+        self.notebook.select(page)
+        def focus_field():
+            entry.focus_set()
+            # Mostrar el campo también cuando queda debajo del borde inferior.
+            top = entry.winfo_rooty() - self.canvas.winfo_rooty()
+            if top + entry.winfo_height() > self.canvas.winfo_height():
+                height = self.canvas.bbox(self.content_window)[3] - self.canvas.bbox(self.content_window)[1]
+                self.canvas.yview_moveto(max(0, top - 36) / max(1, height))
+        self.after_idle(focus_field)
 
     def review_warnings(self):
         if self.warnings:
@@ -856,17 +985,19 @@ class App(tk.Tk):
                                            "error": "Error.TLabel"}.get(kind, "Status.TLabel"))
 
     def convert_coordinates(self):
+        source = self.google_coords.get()
         try:
-            latitude, longitude, x, y = convert_google_coordinates(self.google_coords.get())
+            latitude, longitude, x, y = convert_google_coordinates(source)
         except (ValueError, RuntimeError) as exc:
             self.coordinate_hint.set(str(exc))
             self.coordinate_hint_label.configure(style="CoordinatesError.TLabel")
             self.set_feedback("No se convirtieron las coordenadas. Corrige la entrada.", "error")
             return
+        self.google_coords.set(unwrap_coordinates(source))
         for key, value in zip(("GPS_LAT", "GPS_LON", "LAMBERT_X", "LAMBERT_Y"),
                               (latitude, longitude, x, y)):
             self.vars[key].set(value)
-        self.coordinate_hint.set("Conversión local completada · NAD83 / Puerto Rico e Islas Vírgenes · metros")
+        self.coordinate_hint.set("Conversión completada.")
         self.coordinate_hint_label.configure(style="CoordinatesHint.TLabel")
         self.set_feedback("Coordenadas convertidas: revisa GPS y Lambert antes de exportar.", "success")
 
@@ -903,6 +1034,7 @@ class App(tk.Tk):
                         + ("Hay avisos disponibles." if self.warnings else ""))
         self.review_button.configure(state="normal" if self.warnings else "disabled")
         self.load_preview(path)
+        self.refresh_review()
 
     def clear_all(self):
         self.clear_preview()
@@ -918,6 +1050,7 @@ class App(tk.Tk):
         self.notice.set("Los datos se procesan en este equipo. Revisa cada campo antes de exportar.")
         self.warnings = []
         self.review_button.configure(state="disabled")
+        self.refresh_review()
 
     def export(self):
         data = {k: self.vars[k].get().strip() for k in KEYS}

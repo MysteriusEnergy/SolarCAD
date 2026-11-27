@@ -5,15 +5,15 @@ Aplicación de escritorio para Windows que toma datos de una factura de electric
 ## Uso
 
 1. Abre **SolarCAD** y selecciona una factura PDF.
-2. Revisa o corrige los campos en **Datos para AutoCAD**. El botón **Ver avisos** muestra los valores que necesitan atención. Si la ventana es pequeña, desplázate por el formulario con la rueda del ratón o la barra lateral; los botones inferiores siguen visibles.
-3. En **Consumo · Excel**, consulta la página original junto a los doce campos. SolarCAD intenta abrir directamente el historial; usa **◀ / ▶** para cambiar de página y **− / + / Ajustar ancho** para acercar la gráfica. Pon el cursor **sobre la imagen** y gira la rueda del ratón para recorrer la página; con **Mayús + rueda** te desplazas a los lados. Fuera del visor, la rueda desplaza el formulario. Si los valores no se leyeron, puedes escribirlos manualmente y copiarlos en vertical.
-4. Pulsa **Generar datos_cliente.txt** y, en AutoCAD, usa `SOLARIMPORT6` para seleccionar ese archivo.
+2. En **Rótulo**, revisa los datos de **Cliente y servicio** y completa las coordenadas en el panel **Ubicación**, justo debajo. **Ver avisos** muestra los detalles que necesitan atención.
+3. En **Consumo**, revisa los doce valores y cópialos para Excel. En ventanas estrechas, **Ver gráfica** abre el PDF en una ventana aparte. SolarCAD intenta mostrar directamente el historial; usa **◀ / ▶** para cambiar de página y **− / + / Ajustar ancho** para controlar el zoom. La rueda sobre la imagen recorre la página y **Mayús + rueda** la mueve a los lados.
+4. En **Revisión**, comprueba los campos del rótulo y usa **Editar** para ir al campo correspondiente. Pulsa **Generar TXT** y, en AutoCAD, usa `SOLARIMPORT6` para seleccionar `datos_cliente.txt`.
 
 **Limpiar todo** vacía los campos antes de trabajar con otra factura. `SYSTEM_ID` se completa manualmente. Un campo vacío se omite en `SOLARIMPORT6`.
 
 ### Coordenadas de Google Maps
 
-En **Datos adicionales**, pega el par de Google Maps en grados decimales, en orden **latitud, longitud** (por ejemplo, `18.4655, -66.1057`) y pulsa **Convertir**. Se llenarán `GPS_LAT`, `GPS_LON`, `LAMBERT_X` (este) y `LAMBERT_Y` (norte). El destino es NAD83 / Puerto Rico e Islas Vírgenes (EPSG:32161), en metros; el origen es WGS 84 (EPSG:4326). El programa comprueba el formato, el orden y que el punto esté en la zona de Puerto Rico/Islas Vírgenes antes de cambiar los campos; también puedes editarlos manualmente. Compara el resultado con el plano si necesitas precisión topográfica: la transformación de datum publicada para esta zona indica una precisión aproximada de 2 m.
+En el panel **Ubicación** de **Rótulo**, pega el par de Google Maps en grados decimales, en orden **latitud, longitud** (por ejemplo, `18.4655, -66.1057`) y pulsa **Convertir**. Se llenarán `GPS_LAT`, `GPS_LON`, `LAMBERT_X` (este) y `LAMBERT_Y` (norte). El destino es NAD83 / Puerto Rico e Islas Vírgenes (EPSG:32161), en metros; el origen es WGS 84 (EPSG:4326). El programa comprueba el formato, el orden y que el punto esté en la zona de Puerto Rico/Islas Vírgenes antes de cambiar los campos; también puedes editarlos manualmente. Compara el resultado con el plano si necesitas precisión topográfica: la transformación de datum publicada para esta zona indica una precisión aproximada de 2 m.
 
 La conversión funciona sin Internet gracias a `pyproj` y la rejilla local `grids/us_noaa_pvhpgn.tif` de NOAA/PROJ-data. Para distribuir el ejecutable **conserva toda la carpeta** `dist/SolarCAD`, incluida `_internal`.
 
